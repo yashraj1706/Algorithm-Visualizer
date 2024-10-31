@@ -4,8 +4,6 @@ import './SortComp.css';
 
 const PRIMARY_COLOR = 'bisque';
 const SECONDARY_COLOR = 'red';
-const ANIMATION_SPEED_MS = 30; // Define your animation speed here
-
 const SortComp = () => {
   const [array, setArray] = useState([]);
   const [width, setWidth] = useState(window.innerWidth);
