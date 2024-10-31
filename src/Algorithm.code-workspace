@@ -1,0 +1,15 @@
+{
+	"folders": [
+		{
+			"name": "Algorithm",
+			"path": "../.."
+		},
+		{
+			"name": "phaser3-tutorial-src",
+			"path": "../../../../../../Downloads/phaser3-tutorial-src"
+		}
+	],
+	"settings": {
+		"liveServer.settings.multiRootWorkspaceName": "Algorithm"
+	}
+}
