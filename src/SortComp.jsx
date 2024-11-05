@@ -1,88 +1,100 @@
-import React, { useState, useEffect } from 'react';
-import { getMergeSortAnimations,getBubbleSortAnimations, getInsertionSortAnimations, getSelectionSortAnimations } from './Algorithms.js';
+import React, { useState, useEffect, useRef } from 'react';
+import { getMergeSortAnimations, getBubbleSortAnimations, getInsertionSortAnimations, getSelectionSortAnimations } from './Algorithms.js';
 import './SortComp.css';
 
 const PRIMARY_COLOR = 'bisque';
 const SECONDARY_COLOR = 'red';
+
 const SortComp = () => {
   const [array, setArray] = useState([]);
   const [width, setWidth] = useState(window.innerWidth);
-  const [noOfElems, setNoOfElems] = useState(73);
+  const [noOfElems, setNoOfElems] = useState(30);
   const [speed, setSpeed] = useState(20);
-    const[disabledOrNot,setdisabledOrNot]=useState(false);
+  const [disabledOrNot, setDisabledOrNot] = useState(false);
+  
+  // Store timeouts in a ref so they persist across renders
+  const timeoutsRef = useRef([]);
 
   useEffect(() => {
     resetArray();
     const handleResize = () => {
       setWidth(window.innerWidth);
-      const calculatedNoOfElems = Math.floor((window.innerWidth - (window.innerWidth * 0.2)) / 14);
+      const calculatedNoOfElems = Math.floor((width - (width * 0.2)) / 30);
       setNoOfElems(calculatedNoOfElems);
     };
-
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
-  const startAnimation = () => setdisabledOrNot(true);
-const endAnimation = () => setdisabledOrNot(false);
+
+  const startAnimation = () => setDisabledOrNot(true);
+  const endAnimation = () => setDisabledOrNot(false);
 
   const resetArray = () => {
-    
+    // Clear ongoing animations
+    clearAllTimeouts();
+
     const newArray = [];
     for (let i = 0; i < noOfElems; i++) {
-      newArray.push(randomIntFromInterval(5, 430));
+      newArray.push(randomIntFromInterval(5, 400));
     }
     setArray(newArray);
-   
+    endAnimation();
+  };
+
+  const clearAllTimeouts = () => {
+    timeoutsRef.current.forEach(timeout => clearTimeout(timeout));
+    timeoutsRef.current = []; // Clear the list after clearing all timeouts
   };
 
   const mergeSort = () => {
     startAnimation();
     const animations = getMergeSortAnimations(array);
-    for (let i = 0; i < animations.length; i++) {
+    animations.forEach((animation, i) => {
       const arrayBars = document.getElementsByClassName('array-bar');
       const isColorChange = i % 3 !== 2;
-      if (isColorChange) {
-        const [barOneIdx, barTwoIdx] = animations[i];
-        const barOneStyle = arrayBars[barOneIdx].style;
-        const barTwoStyle = arrayBars[barTwoIdx].style;
-        const color = i % 3 === 0 ? SECONDARY_COLOR : PRIMARY_COLOR;
-
-        setTimeout(() => {
+      
+      const timeoutId = setTimeout(() => {
+        if (isColorChange) {
+          const [barOneIdx, barTwoIdx] = animation;
+          const barOneStyle = arrayBars[barOneIdx].style;
+          const barTwoStyle = arrayBars[barTwoIdx].style;
+          const color = i % 3 === 0 ? SECONDARY_COLOR : PRIMARY_COLOR;
           barOneStyle.backgroundColor = color;
           barTwoStyle.backgroundColor = color;
-        }, i * speed);
-      } else {
-        setTimeout(() => {
-          const [barOneIdx, newHeight] = animations[i];
+        } else {
+          const [barOneIdx, newHeight] = animation;
           const barOneStyle = arrayBars[barOneIdx].style;
           barOneStyle.height = `${newHeight}px`;
-        }, i * speed);
-      }
-    }
+          arrayBars[barOneIdx].textContent = newHeight;
+        }
+      }, i * speed);
+      timeoutsRef.current.push(timeoutId);
+    });
     endAnimation();
   };
 
+  // Similarly update bubbleSort and other sort functions with clearAllTimeouts and timeout tracking
   const bubbleSort = () => {
     startAnimation();
     const animations = getBubbleSortAnimations(array);
-    for (let i = 0; i < animations.length; i++) {
+    animations.forEach((animation, i) => {
       const arrayBars = document.getElementsByClassName('array-bar');
-      const isColorChange = i % 4 < 2; // Determine color change
-  
-      if (isColorChange) {
-        const [barOneIdx, barTwoIdx] = animations[i];
-        const color = i % 4 === 0 ? SECONDARY_COLOR : PRIMARY_COLOR;
-        setTimeout(() => {
+      const isColorChange = i % 4 < 2;
+
+      const timeoutId = setTimeout(() => {
+        if (isColorChange) {
+          const [barOneIdx, barTwoIdx] = animation;
+          const color = i % 4 === 0 ? SECONDARY_COLOR : PRIMARY_COLOR;
           arrayBars[barOneIdx].style.backgroundColor = color;
           arrayBars[barTwoIdx].style.backgroundColor = color;
-        }, i * speed);
-      } else {
-        setTimeout(() => {
-          const [barIdx, newHeight] = animations[i];
+        } else {
+          const [barIdx, newHeight] = animation;
           arrayBars[barIdx].style.height = `${newHeight}px`;
-        }, i * speed);
-      }
-    }
+          arrayBars[barIdx].textContent = newHeight;
+        }
+      }, i * speed);
+      timeoutsRef.current.push(timeoutId);
+    });
     endAnimation();
   };
   
@@ -131,10 +143,13 @@ const endAnimation = () => setdisabledOrNot(false);
   };
   
 
+  // returning the jsx component that displays all the code
   return (
     <div className="container">
       <div className='arr-container'>
+        {/* //mapping array of elements to show them as indivisual components  */}
         {array.map((value, idx) => (
+          // indivisual bars, the height is fixed based on the value of element
           <div
             className="array-bar"
             key={idx}
@@ -145,18 +160,18 @@ const endAnimation = () => setdisabledOrNot(false);
               fontWeight:"bold",
               writingMode:'vertical-rl'
             }}
-        //   >{value}</div>
-        ></div>
+          >{value}</div>
+        // ></div>
 
     ))}
       </div>
-
       <div className='slider-cont'>
         <div className="innerSlidCont">
+           {/* slider to control the input size */}
           <input 
             type='range'
             min={8}
-            max={Math.floor((width - (width * 0.2)) / 14)}
+            max={Math.floor((width - (width * 0.2)) / 30)}
             value={noOfElems}
             disabled={disabledOrNot}
             onChange={(e) => {
@@ -168,6 +183,7 @@ const endAnimation = () => setdisabledOrNot(false);
           <label>Number of elements in Array: {noOfElems}</label>
         </div>
         <div className="innerSlidCont">
+           {/* slider to control sorting speed */}
           <input 
             type='range'
             min={1}
@@ -178,7 +194,11 @@ const endAnimation = () => setdisabledOrNot(false);
           />
           <label>Slow Motion: {speed}</label>
         </div>
+
+        {/* //reset the dataset by clicking on the button */}
         <button onClick={resetArray} disabled={disabledOrNot}>Generate New Array</button>
+
+        {/* below, the 2 buttons are to be used to perform execution of the merge and bubble sort indivisually */}
         <button onClick={mergeSort} disabled={disabledOrNot}>Merge Sort</button>
         <button onClick={bubbleSort} disabled={disabledOrNot}>Bubble Sort</button>
         {/* <button onClick={insertionSort}>Insertion Sort</button> */}
@@ -192,6 +212,8 @@ const endAnimation = () => setdisabledOrNot(false);
   );
 };
 
+
+//Function to generate number of elements to sort.
 function randomIntFromInterval(min, max) {
   return Math.floor(Math.random() * (max - min + 1) + min);
 }

@@ -56,6 +56,8 @@ export function getMergeSortAnimations(array) {
     }
   }
 
+
+  
   export function getBubbleSortAnimations(array) {
     const animations = [];
     const n = array.length;
