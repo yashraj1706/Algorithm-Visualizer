@@ -1,231 +1,375 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { getMergeSortAnimations, getBubbleSortAnimations, getInsertionSortAnimations, getSelectionSortAnimations } from './Algorithms.js';
-import './SortComp.css';
+import React, { useState, useEffect, useRef } from "react";
+import { AlgorithmRegistry } from "./Algorithms.js";
+import "./SortComp.css";
 
-const PRIMARY_COLOR = 'bisque';
-const SECONDARY_COLOR = 'red';
+const PRIMARY_COLOR = "#f8d7a3"; // bar base color (soft sand)
+const SECONDARY_COLOR = "#22d3ee"; // highlight (cyan)
+
+const algorithmOptions = Object.keys(AlgorithmRegistry);
+
+// Time complexities for display
+const complexities = {
+  "Merge Sort": "O(n log n)",
+  "Quick Sort": "O(n log n) avg, O(n²) worst",
+  "Heap Sort": "O(n log n)",
+  "Bubble Sort": "O(n²)",
+  "Insertion Sort": "O(n²)",
+  "Selection Sort": "O(n²)",
+  "Shell Sort": "≈ O(n^(3/2))",
+  "Cocktail Sort": "O(n²)",
+};
+
+const formatTime = (ms) => {
+  if (ms == null) return "—";
+  const total = Math.max(0, Math.round(ms));
+  const minutes = Math.floor(total / 60000);
+  const seconds = Math.floor((total % 60000) / 1000);
+  const millis = total % 1000;
+  if (minutes > 0)
+    return `${minutes}:${String(seconds).padStart(2, "0")}.${String(
+      millis
+    ).padStart(3, "0")}`;
+  return `${seconds}.${String(millis).padStart(3, "0")}s`;
+};
 
 const SortComp = () => {
   const [array, setArray] = useState([]);
   const [width, setWidth] = useState(window.innerWidth);
   const [noOfElems, setNoOfElems] = useState(30);
-  const [speed, setSpeed] = useState(20);
+  const [speed, setSpeed] = useState(60); // 1..100, higher = faster
   const [disabledOrNot, setDisabledOrNot] = useState(false);
-  
-  // Store timeouts in a ref so they persist across renders
+  const [selectedAlgo, setSelectedAlgo] = useState(algorithmOptions[0]);
+  const [maxHeight, setMaxHeight] = useState(
+    Math.max(120, (window.visualViewport?.height || window.innerHeight) - 160)
+  );
+
+  // Timer + stats
+  const [currentAlgo, setCurrentAlgo] = useState(null);
+  const [elapsedMs, setElapsedMs] = useState(0);
+  const [lastAlgo, setLastAlgo] = useState(null);
+  const [lastElapsedMs, setLastElapsedMs] = useState(null);
+
+  // Track timeouts to enable Stop
   const timeoutsRef = useRef([]);
+  const controlsRef = useRef(null);
+  const timerStartRef = useRef(0);
+  const rafRef = useRef(0);
 
   useEffect(() => {
     resetArray();
-    const handleResize = () => {
+    // Load persisted last-run stats
+    try {
+      const la = localStorage.getItem("algoVis:lastAlgo");
+      const lm = localStorage.getItem("algoVis:lastMs");
+      if (la) setLastAlgo(la);
+      if (lm) setLastElapsedMs(Number(lm));
+    } catch {}
+    const update = () => {
       setWidth(window.innerWidth);
-      const calculatedNoOfElems = Math.floor((width - (width * 0.2)) / 30);
-      setNoOfElems(calculatedNoOfElems);
+      const headerH = controlsRef.current
+        ? controlsRef.current.offsetHeight
+        : 120;
+      const vh = window.visualViewport?.height || window.innerHeight;
+      // Leave a small bottom safety gap (12px desktop, 20px mobile)
+      const bottomGap = vh <= 600 ? 20 : 12;
+      setMaxHeight(Math.max(120, vh - headerH - bottomGap));
+      const max = getMaxElements(window.innerWidth);
+      setNoOfElems((prev) => Math.min(prev, max));
     };
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
+    update();
+    window.addEventListener("resize", update);
+    window.visualViewport?.addEventListener("resize", update);
+    return () => {
+      window.removeEventListener("resize", update);
+      window.visualViewport?.removeEventListener("resize", update);
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    };
   }, []);
+
+  const getMaxElements = (w) => {
+    const approxBar = 10; // px per bar incl. gap
+    const usable = Math.max(320, Math.floor(w * 0.9));
+    return Math.max(8, Math.floor(usable / approxBar));
+  };
+
+  // Map slider (1 slow .. 100 fast) to delay milliseconds
+  const mapSpeedToDelay = (s) => {
+    const minDelay = 5; // fastest
+    const maxDelay = 120; // slowest
+    const clamped = Math.max(1, Math.min(100, s));
+    // linear inverse mapping
+    return Math.round(maxDelay - (clamped - 1) * ((maxDelay - minDelay) / 99));
+  };
 
   const startAnimation = () => setDisabledOrNot(true);
   const endAnimation = () => setDisabledOrNot(false);
 
-  const resetArray = () => {
-    // Clear ongoing animations
-    clearAllTimeouts();
+  const clearAllTimeouts = () => {
+    timeoutsRef.current.forEach((id) => clearTimeout(id));
+    timeoutsRef.current = [];
+  };
 
-    const newArray = [];
-    for (let i = 0; i < noOfElems; i++) {
-      newArray.push(randomIntFromInterval(5, 400));
+  const resetBarColors = () => {
+    const bars = document.getElementsByClassName("array-bar");
+    for (let i = 0; i < bars.length; i++) {
+      bars[i].style.backgroundColor = PRIMARY_COLOR;
     }
+  };
+
+  // Timer helpers
+  const startTimer = (algoName) => {
+    // Move previous complete run to last if available
+    if (currentAlgo && !disabledOrNot && elapsedMs > 0) {
+      setLastAlgo(currentAlgo);
+      setLastElapsedMs(elapsedMs);
+    }
+    setCurrentAlgo(algoName);
+    setElapsedMs(0);
+    timerStartRef.current = performance.now();
+    const tick = () => {
+      setElapsedMs(performance.now() - timerStartRef.current);
+      rafRef.current = requestAnimationFrame(tick);
+    };
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    rafRef.current = requestAnimationFrame(tick);
+  };
+  const stopTimer = (recordFinal = true) => {
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    if (recordFinal) {
+      const final = performance.now() - timerStartRef.current;
+      setElapsedMs(final);
+      // Persist the most recent completed run for next session
+      try {
+        if (currentAlgo) {
+          localStorage.setItem("algoVis:lastAlgo", currentAlgo);
+          localStorage.setItem("algoVis:lastMs", String(final));
+        }
+      } catch {}
+    }
+  };
+
+  const resetArray = () => {
+    clearAllTimeouts();
+    resetBarColors();
+    const newArray = Array.from({ length: noOfElems }, () =>
+      randomIntFromInterval(20, 420)
+    );
     setArray(newArray);
     endAnimation();
   };
 
-  const clearAllTimeouts = () => {
-    timeoutsRef.current.forEach(timeout => clearTimeout(timeout));
-    timeoutsRef.current = []; // Clear the list after clearing all timeouts
-  };
-
-  const mergeSort = () => {
-    startAnimation();
-    const animations = getMergeSortAnimations(array);
-    animations.forEach((animation, i) => {
-      const arrayBars = document.getElementsByClassName('array-bar');
-      const isColorChange = i % 3 !== 2;
-      
-      const timeoutId = setTimeout(() => {
-        if (isColorChange) {
-          const [barOneIdx, barTwoIdx] = animation;
-          const barOneStyle = arrayBars[barOneIdx].style;
-          const barTwoStyle = arrayBars[barTwoIdx].style;
-          const color = i % 3 === 0 ? SECONDARY_COLOR : PRIMARY_COLOR;
-          barOneStyle.backgroundColor = color;
-          barTwoStyle.backgroundColor = color;
-        } else {
-          const [barOneIdx, newHeight] = animation;
-          const barOneStyle = arrayBars[barOneIdx].style;
-          barOneStyle.height = `${newHeight}px`;
-          arrayBars[barOneIdx].textContent = newHeight;
-        }
-      }, i * speed);
-      timeoutsRef.current.push(timeoutId);
-    });
+  const stopSorting = () => {
+    clearAllTimeouts();
+    resetBarColors();
+    stopTimer(false);
     endAnimation();
   };
+  const scheduleEnd = (stepsCount, delayMs) => {
+    const id = setTimeout(() => {
+      stopTimer(true);
+      endAnimation();
+    }, Math.max(0, stepsCount * delayMs + 10));
+    timeoutsRef.current.push(id);
+  };
 
-  // Similarly update bubbleSort and other sort functions with clearAllTimeouts and timeout tracking
-  const bubbleSort = () => {
+  // Runner for step format
+  const runSteps = (steps) => {
     startAnimation();
-    const animations = getBubbleSortAnimations(array);
-    animations.forEach((animation, i) => {
-      const arrayBars = document.getElementsByClassName('array-bar');
-      const isColorChange = i % 4 < 2;
-
-      const timeoutId = setTimeout(() => {
-        if (isColorChange) {
-          const [barOneIdx, barTwoIdx] = animation;
-          const color = i % 4 === 0 ? SECONDARY_COLOR : PRIMARY_COLOR;
-          arrayBars[barOneIdx].style.backgroundColor = color;
-          arrayBars[barTwoIdx].style.backgroundColor = color;
-        } else {
-          const [barIdx, newHeight] = animation;
-          arrayBars[barIdx].style.height = `${newHeight}px`;
-          arrayBars[barIdx].textContent = newHeight;
+    const delayMs = mapSpeedToDelay(speed);
+    const maxVal = Math.max(1, ...array);
+    const scale = maxHeight / maxVal;
+    steps.forEach((step, i) => {
+      const id = setTimeout(() => {
+        const bars = document.getElementsByClassName("array-bar");
+        switch (step.type) {
+          case "highlight": {
+            const [a, b] = step.indices;
+            if (bars[a]) bars[a].style.backgroundColor = SECONDARY_COLOR;
+            if (bars[b]) bars[b].style.backgroundColor = SECONDARY_COLOR;
+            break;
+          }
+          case "unhighlight": {
+            const [a, b] = step.indices;
+            if (bars[a]) bars[a].style.backgroundColor = PRIMARY_COLOR;
+            if (bars[b]) bars[b].style.backgroundColor = PRIMARY_COLOR;
+            break;
+          }
+          case "set": {
+            const idx = step.index;
+            if (bars[idx]) {
+              const h = Math.max(2, Math.round(step.value * scale));
+              bars[idx].style.height = `${h}px`;
+              bars[idx].textContent = step.value;
+            }
+            break;
+          }
+          case "mark": {
+            const idx = step.index;
+            const color = step.color || SECONDARY_COLOR;
+            if (bars[idx]) bars[idx].style.backgroundColor = color;
+            break;
+          }
+          default:
+            break;
         }
-      }, i * speed);
-      timeoutsRef.current.push(timeoutId);
+      }, i * delayMs);
+      timeoutsRef.current.push(id);
     });
-    endAnimation();
+    scheduleEnd(steps.length, delayMs);
   };
-  
-  const insertionSort = () => {
-    const animations = getInsertionSortAnimations(array);
-    for (let i = 0; i < animations.length; i++) {
-      const arrayBars = document.getElementsByClassName('array-bar');
-      const isColorChange = i % 3 === 0;
-  
-      if (isColorChange) {
-        const [barOneIdx, barTwoIdx] = animations[i];
-        const color = i % 3 === 0 ? SECONDARY_COLOR : PRIMARY_COLOR;
-        setTimeout(() => {
-          arrayBars[barOneIdx].style.backgroundColor = color;
-          arrayBars[barTwoIdx].style.backgroundColor = color;
-        }, i * speed);
-      } else {
-        setTimeout(() => {
-          const [barIdx, newHeight] = animations[i];
-          arrayBars[barIdx].style.height = `${newHeight}px`;
-        }, i * speed);
-      }
-    }
-  };
-  
-  const selectionSort = () => {
-    const animations = getSelectionSortAnimations(array);
-    for (let i = 0; i < animations.length; i++) {
-      const arrayBars = document.getElementsByClassName('array-bar');
-      const isColorChange = i % 4 < 2;
-  
-      if (isColorChange) {
-        const [barOneIdx, barTwoIdx] = animations[i];
-        const color = i % 4 === 0 ? SECONDARY_COLOR : PRIMARY_COLOR;
-        setTimeout(() => {
-          arrayBars[barOneIdx].style.backgroundColor = color;
-          arrayBars[barTwoIdx].style.backgroundColor = color;
-        }, i * speed);
-      } else {
-        setTimeout(() => {
-          const [barIdx, newHeight] = animations[i];
-          arrayBars[barIdx].style.height = `${newHeight}px`;
-        }, i * speed);
-      }
-    }
-  };
-  
 
-  // returning the jsx component that displays all the code
+  const handleSort = () => {
+    const fn = AlgorithmRegistry[selectedAlgo];
+    if (!fn) return;
+    // Move previous completed run to last right before a new run starts
+    if (currentAlgo && !disabledOrNot && elapsedMs > 0) {
+      setLastAlgo(currentAlgo);
+      setLastElapsedMs(elapsedMs);
+    }
+    startTimer(selectedAlgo);
+    runSteps(fn(array.slice()));
+  };
+
+  const maxVal = Math.max(1, ...array);
+  const scale = maxHeight / maxVal;
+  const barWidth = Math.max(
+    4,
+    Math.floor((width * 0.9) / Math.max(1, noOfElems)) - 2
+  );
+
+  const deltaMs = lastElapsedMs != null ? elapsedMs - lastElapsedMs : null;
+
   return (
     <div className="container">
-      <div className='arr-container'>
-        {/* //mapping array of elements to show them as indivisual components  */}
+      <div ref={controlsRef} className="controls">
+        <div className="control-group">
+          <label htmlFor="algo-select">Algorithm</label>
+          <select
+            id="algo-select"
+            className="select"
+            value={selectedAlgo}
+            disabled={disabledOrNot}
+            onChange={(e) => setSelectedAlgo(e.target.value)}
+          >
+            {algorithmOptions.map((name) => (
+              <option key={name} value={name} title={complexities[name] || ""}>
+                {name} — {complexities[name] || "—"}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="input-container">
+          <div className="control-group">
+            <label>Elements: {noOfElems}</label>
+            <input
+              type="range"
+              min={8}
+              max={getMaxElements(width)}
+              value={noOfElems}
+              disabled={disabledOrNot}
+              onChange={(e) => setNoOfElems(Number(e.target.value))}
+              onMouseUp={resetArray}
+              onTouchEnd={resetArray}
+            />
+          </div>
+
+          <div className="control-group ">
+            <label>Speed: {speed}</label>
+            <input
+              type="range"
+              min={1}
+              max={100}
+              value={speed}
+              disabled={disabledOrNot}
+              onChange={(e) => setSpeed(Number(e.target.value))}
+            />
+            <div className="speed-scale">
+              <span>Slow</span>
+              <span>Fast</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="stats">
+          <div
+            className="stat-line"
+            title={currentAlgo ? complexities[currentAlgo] || "" : ""}
+          >
+            <span className="muted">Current:</span>{" "}
+            <strong>{currentAlgo || "—"}</strong>
+            {currentAlgo && (
+              <span className="complexity">({complexities[currentAlgo]})</span>
+            )}
+            <span className="time">
+              {formatTime(
+                disabledOrNot ? elapsedMs : currentAlgo ? elapsedMs : null
+              )}
+            </span>
+          </div>
+          <div className="stat-line">
+            <span className="muted">Last:</span>{" "}
+            <strong>{lastAlgo || "—"}</strong>
+            {lastAlgo && (
+              <span className="complexity">
+                ({complexities[lastAlgo] || "?"})
+              </span>
+            )}
+            <span className="time">{formatTime(lastElapsedMs)}</span>
+            {lastElapsedMs != null && currentAlgo && (
+              <span className={`delta ${deltaMs < 0 ? "faster" : "slower"}`}>
+                {deltaMs < 0 ? "−" : "+"}
+                {formatTime(Math.abs(deltaMs))}
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div className="buttons">
+          <button
+            onClick={resetArray}
+            disabled={disabledOrNot}
+            className="btn secondary"
+          >
+            Shuffle
+          </button>
+          <button
+            onClick={handleSort}
+            disabled={disabledOrNot}
+            className="btn primary"
+          >
+            Sort
+          </button>
+          <button onClick={stopSorting} className="btn danger">
+            Stop
+          </button>
+        </div>
+      </div>
+
+      <div className="arr-container">
         {array.map((value, idx) => (
-          // indivisual bars, the height is fixed based on the value of element
           <div
             className="array-bar"
             key={idx}
             style={{
-              height: `${value}px`,
-              fontSize:"9px",
-              color:'black',
-              fontWeight:"bold",
-              writingMode:'vertical-rl'
+              height: `${Math.max(2, Math.round(value * scale))}px`,
+              width: `${barWidth}px`,
+              fontSize: "9px",
+              color: "black",
+              fontWeight: "bold",
+              writingMode: "vertical-rl",
             }}
-          >{value}</div>
-        // ></div>
-
-    ))}
-      </div>
-      <div className='slider-cont'>
-        <div className="innerSlidCont">
-           {/* slider to control the input size */}
-          <input 
-            type='range'
-            min={8}
-            max={Math.floor((width - (width * 0.2)) / 30)}
-            value={noOfElems}
-            disabled={disabledOrNot}
-            onChange={(e) => {
-              const newValue = Math.max(8, Math.min(e.target.value, Math.floor((width - (width * 0.2)) / 14)));
-              setNoOfElems(newValue);
-              resetArray(); 
-            }}
-          />
-          <label>Number of elements in Array: {noOfElems}</label>
-        </div>
-        <div className="innerSlidCont">
-           {/* slider to control sorting speed */}
-          <input 
-            type='range'
-            min={1}
-            max={100}
-            value={speed}
-            disabled={disabledOrNot}
-            onChange={(e) => setSpeed(Number(e.target.value))}
-          />
-          <label>Slow Motion: {speed}</label>
-        </div>
-
-        {/* //reset the dataset by clicking on the button */}
-        <button onClick={resetArray} disabled={disabledOrNot}>Generate New Array</button>
-
-        {/* below, the 2 buttons are to be used to perform execution of the merge and bubble sort indivisually */}
-        <button onClick={mergeSort} disabled={disabledOrNot}>Merge Sort</button>
-        <button onClick={bubbleSort} disabled={disabledOrNot}>Bubble Sort</button>
-        {/* <button onClick={insertionSort}>Insertion Sort</button> */}
-        {/* <button onClick={selectionSort}>Selection Sort</button> */}
-      </div>
-
-      <div className='button-container'>
-        {/* Other sorting buttons can go here */}
+          >
+            {value}
+          </div>
+        ))}
       </div>
     </div>
   );
 };
 
-
 //Function to generate number of elements to sort.
 function randomIntFromInterval(min, max) {
   return Math.floor(Math.random() * (max - min + 1) + min);
-}
-
-function arraysAreEqual(arrayOne, arrayTwo) {
-  if (arrayOne.length !== arrayTwo.length) return false;
-  for (let i = 0; i < arrayOne.length; i++) {
-    if (arrayOne[i] !== arrayTwo[i]) {
-      return false;
-    }
-  }
-  return true;
 }
 
 export default SortComp;

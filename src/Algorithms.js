@@ -1,130 +1,281 @@
-export function getMergeSortAnimations(array) {
-    const animations = [];
-    if (array.length <= 1) return array;
-    const auxiliaryArray = array.slice();
-    mergeSortHelper(array, 0, array.length - 1, auxiliaryArray, animations);
-    return animations;
+// Unified animation step format across algorithms
+// Step types:
+// - { type: 'highlight', indices: [i, j] }
+// - { type: 'unhighlight', indices: [i, j] }
+// - { type: 'set', index: i, value: number }
+// - { type: 'mark', index: i, color: string }
+
+// Merge Sort
+export function getMergeSortSteps(input) {
+  const arr = input.slice();
+  const aux = arr.slice();
+  const steps = [];
+  function mergeSort(start, end) {
+    if (start >= end) return;
+    const mid = Math.floor((start + end) / 2);
+    mergeSort(start, mid);
+    mergeSort(mid + 1, end);
+    merge(start, mid, end);
   }
-  
-  function mergeSortHelper(
-    mainArray,
-    startIdx,
-    endIdx,
-    auxiliaryArray,
-    animations,
-  ) {
-    if (startIdx === endIdx) return;
-    const middleIdx = Math.floor((startIdx + endIdx) / 2);
-    mergeSortHelper(auxiliaryArray, startIdx, middleIdx, mainArray, animations);
-    mergeSortHelper(auxiliaryArray, middleIdx + 1, endIdx, mainArray, animations);
-    doMerge(mainArray, startIdx, middleIdx, endIdx, auxiliaryArray, animations);
-  }
-  
-  function doMerge(
-    mainArray,
-    startIdx,
-    middleIdx,
-    endIdx,
-    auxiliaryArray,
-    animations,
-  ) {
-    let k = startIdx;
-    let i = startIdx;
-    let j = middleIdx + 1;
-    while (i <= middleIdx && j <= endIdx) {
-      animations.push([i, j]);
-      animations.push([i, j]);
-      if (auxiliaryArray[i] <= auxiliaryArray[j]) {
-        animations.push([k, auxiliaryArray[i]]);
-        mainArray[k++] = auxiliaryArray[i++];
+  function merge(start, mid, end) {
+    let i = start,
+      j = mid + 1,
+      k = start;
+    while (i <= mid && j <= end) {
+      steps.push({ type: "highlight", indices: [i, j] });
+      steps.push({ type: "unhighlight", indices: [i, j] });
+      if (aux[i] <= aux[j]) {
+        steps.push({ type: "set", index: k, value: aux[i] });
+        arr[k++] = aux[i++];
       } else {
-        animations.push([k, auxiliaryArray[j]]);
-        mainArray[k++] = auxiliaryArray[j++];
+        steps.push({ type: "set", index: k, value: aux[j] });
+        arr[k++] = aux[j++];
       }
     }
-    while (i <= middleIdx) {
-      animations.push([i, i]);
-      animations.push([i, i]);
-      animations.push([k, auxiliaryArray[i]]);
-      mainArray[k++] = auxiliaryArray[i++];
+    while (i <= mid) {
+      steps.push({ type: "highlight", indices: [i, i] });
+      steps.push({ type: "unhighlight", indices: [i, i] });
+      steps.push({ type: "set", index: k, value: aux[i] });
+      arr[k++] = aux[i++];
     }
-    while (j <= endIdx) {
-      animations.push([j, j]);
-      animations.push([j, j]);
-      animations.push([k, auxiliaryArray[j]]);
-      mainArray[k++] = auxiliaryArray[j++];
+    while (j <= end) {
+      steps.push({ type: "highlight", indices: [j, j] });
+      steps.push({ type: "unhighlight", indices: [j, j] });
+      steps.push({ type: "set", index: k, value: aux[j] });
+      arr[k++] = aux[j++];
+    }
+    // copy back to aux
+    for (let t = start; t <= end; t++) aux[t] = arr[t];
+  }
+  mergeSort(0, arr.length - 1);
+  return steps;
+}
+
+// Bubble Sort
+export function getBubbleSortSteps(input) {
+  const arr = input.slice();
+  const steps = [];
+  const n = arr.length;
+  let sorted = false;
+  for (let i = 0; i < n - 1 && !sorted; i++) {
+    sorted = true;
+    for (let j = 0; j < n - 1 - i; j++) {
+      steps.push({ type: "highlight", indices: [j, j + 1] });
+      steps.push({ type: "unhighlight", indices: [j, j + 1] });
+      if (arr[j] > arr[j + 1]) {
+        const a = arr[j + 1],
+          b = arr[j];
+        arr[j] = a;
+        arr[j + 1] = b;
+        steps.push({ type: "set", index: j, value: a });
+        steps.push({ type: "set", index: j + 1, value: b });
+        sorted = false;
+      } else {
+        // keep as is to maintain consistent timing
+        steps.push({ type: "set", index: j, value: arr[j] });
+        steps.push({ type: "set", index: j + 1, value: arr[j + 1] });
+      }
     }
   }
+  return steps;
+}
 
+// Insertion Sort
+export function getInsertionSortSteps(input) {
+  const arr = input.slice();
+  const steps = [];
+  for (let i = 1; i < arr.length; i++) {
+    const key = arr[i];
+    let j = i - 1;
+    while (j >= 0 && arr[j] > key) {
+      steps.push({ type: "highlight", indices: [j, j + 1] });
+      steps.push({ type: "unhighlight", indices: [j, j + 1] });
+      arr[j + 1] = arr[j];
+      steps.push({ type: "set", index: j + 1, value: arr[j] });
+      j--;
+    }
+    arr[j + 1] = key;
+    steps.push({ type: "set", index: j + 1, value: key });
+  }
+  return steps;
+}
 
-  
-  export function getBubbleSortAnimations(array) {
-    const animations = [];
-    const n = array.length;
-    let sorted = false;
-    
-    for (let i = 0; i < n - 1 && !sorted; i++) {
-      sorted = true;
-      for (let j = 0; j < n - 1 - i; j++) {
-        animations.push([j, j + 1]); // Comparison (color change)
-        animations.push([j, j + 1]); // Revert color back
-  
-        if (array[j] > array[j + 1]) {
-          animations.push([j, array[j + 1]]); // Height change
-          animations.push([j + 1, array[j]]); // Height change
-          [array[j], array[j + 1]] = [array[j + 1], array[j]];
-          sorted = false;
-        } else {
-          animations.push([j, array[j]]); // No height change, keep same
-          animations.push([j + 1, array[j + 1]]); // No height change, keep same
-        }
+// Selection Sort
+export function getSelectionSortSteps(input) {
+  const arr = input.slice();
+  const steps = [];
+  const n = arr.length;
+  for (let i = 0; i < n - 1; i++) {
+    let minIdx = i;
+    for (let j = i + 1; j < n; j++) {
+      steps.push({ type: "highlight", indices: [minIdx, j] });
+      steps.push({ type: "unhighlight", indices: [minIdx, j] });
+      if (arr[j] < arr[minIdx]) minIdx = j;
+    }
+    if (minIdx !== i) {
+      const a = arr[minIdx],
+        b = arr[i];
+      arr[i] = a;
+      arr[minIdx] = b;
+      steps.push({ type: "set", index: i, value: a });
+      steps.push({ type: "set", index: minIdx, value: b });
+    }
+  }
+  return steps;
+}
+
+// Quick Sort (Lomuto partition)
+export function getQuickSortSteps(input) {
+  const arr = input.slice();
+  const steps = [];
+  function swap(i, j) {
+    const tmp = arr[i];
+    arr[i] = arr[j];
+    arr[j] = tmp;
+    steps.push({ type: "set", index: i, value: arr[i] });
+    steps.push({ type: "set", index: j, value: arr[j] });
+  }
+  function partition(lo, hi) {
+    const pivot = arr[hi];
+    steps.push({ type: "mark", index: hi, color: "orange" });
+    let i = lo;
+    for (let j = lo; j < hi; j++) {
+      steps.push({ type: "highlight", indices: [j, hi] });
+      steps.push({ type: "unhighlight", indices: [j, hi] });
+      if (arr[j] <= pivot) {
+        if (i !== j) swap(i, j);
+        i++;
       }
     }
-    return animations;
+    swap(i, hi);
+    return i;
   }
+  function qsort(lo, hi) {
+    if (lo >= hi) return;
+    const p = partition(lo, hi);
+    qsort(lo, p - 1);
+    qsort(p + 1, hi);
+  }
+  qsort(0, arr.length - 1);
+  return steps;
+}
 
-  export function getInsertionSortAnimations(array) {
-    const animations = [];
-    const n = array.length;
-  
-    for (let i = 1; i < n; i++) {
-      let key = array[i];
-      let j = i - 1;
-  
-      while (j >= 0 && array[j] > key) {
-        animations.push([j, j + 1]); // Comparison (color change)
-        animations.push([j, j + 1]); // Revert color back
-        animations.push([j + 1, array[j]]); // Shift value to the right
-        array[j + 1] = array[j];
-        j--;
-      }
-      animations.push([j + 1, key]); // Place key in correct position
-      array[j + 1] = key;
-    }
-  
-    return animations;
+// Heap Sort (max-heap)
+export function getHeapSortSteps(input) {
+  const arr = input.slice();
+  const steps = [];
+  const n = arr.length;
+  const left = (i) => 2 * i + 1;
+  const right = (i) => 2 * i + 2;
+  function swap(i, j) {
+    const t = arr[i];
+    arr[i] = arr[j];
+    arr[j] = t;
+    steps.push({ type: "set", index: i, value: arr[i] });
+    steps.push({ type: "set", index: j, value: arr[j] });
   }
+  function heapify(i, size) {
+    let largest = i;
+    const l = left(i),
+      r = right(i);
+    if (l < size) {
+      steps.push({ type: "highlight", indices: [i, l] });
+      steps.push({ type: "unhighlight", indices: [i, l] });
+      if (arr[l] > arr[largest]) largest = l;
+    }
+    if (r < size) {
+      steps.push({ type: "highlight", indices: [largest, r] });
+      steps.push({ type: "unhighlight", indices: [largest, r] });
+      if (arr[r] > arr[largest]) largest = r;
+    }
+    if (largest !== i) {
+      swap(i, largest);
+      heapify(largest, size);
+    }
+  }
+  // Build heap
+  for (let i = Math.floor(n / 2) - 1; i >= 0; i--) heapify(i, n);
+  // Extract elements
+  for (let end = n - 1; end > 0; end--) {
+    swap(0, end);
+    heapify(0, end);
+  }
+  return steps;
+}
 
-  export function getSelectionSortAnimations(array) {
-    const animations = [];
-    const n = array.length;
-  
-    for (let i = 0; i < n - 1; i++) {
-      let minIdx = i;
-      for (let j = i + 1; j < n; j++) {
-        animations.push([minIdx, j]); // Comparison (color change)
-        animations.push([minIdx, j]); // Revert color back
-        if (array[j] < array[minIdx]) {
-          minIdx = j;
-        }
+// Shell Sort (gap insertion)
+export function getShellSortSteps(input) {
+  const arr = input.slice();
+  const steps = [];
+  const n = arr.length;
+  for (let gap = Math.floor(n / 2); gap > 0; gap = Math.floor(gap / 2)) {
+    for (let i = gap; i < n; i++) {
+      const temp = arr[i];
+      let j = i;
+      while (j >= gap && arr[j - gap] > temp) {
+        steps.push({ type: "highlight", indices: [j - gap, j] });
+        steps.push({ type: "unhighlight", indices: [j - gap, j] });
+        arr[j] = arr[j - gap];
+        steps.push({ type: "set", index: j, value: arr[j] });
+        j -= gap;
       }
-      if (minIdx !== i) {
-        animations.push([i, array[minIdx]]); // Height change
-        animations.push([minIdx, array[i]]); // Height change
-        [array[i], array[minIdx]] = [array[minIdx], array[i]];
+      arr[j] = temp;
+      steps.push({ type: "set", index: j, value: temp });
+    }
+  }
+  return steps;
+}
+
+// Cocktail Shaker Sort
+export function getCocktailSortSteps(input) {
+  const arr = input.slice();
+  const steps = [];
+  let start = 0;
+  let end = arr.length - 1;
+  let swapped = true;
+  while (swapped) {
+    swapped = false;
+    for (let i = start; i < end; i++) {
+      steps.push({ type: "highlight", indices: [i, i + 1] });
+      steps.push({ type: "unhighlight", indices: [i, i + 1] });
+      if (arr[i] > arr[i + 1]) {
+        const a = arr[i + 1],
+          b = arr[i];
+        arr[i] = a;
+        arr[i + 1] = b;
+        steps.push({ type: "set", index: i, value: a });
+        steps.push({ type: "set", index: i + 1, value: b });
+        swapped = true;
       }
     }
-  
-    return animations;
+    if (!swapped) break;
+    swapped = false;
+    end--;
+    for (let i = end - 1; i >= start; i--) {
+      steps.push({ type: "highlight", indices: [i, i + 1] });
+      steps.push({ type: "unhighlight", indices: [i, i + 1] });
+      if (arr[i] > arr[i + 1]) {
+        const a = arr[i + 1],
+          b = arr[i];
+        arr[i] = a;
+        arr[i + 1] = b;
+        steps.push({ type: "set", index: i, value: a });
+        steps.push({ type: "set", index: i + 1, value: b });
+        swapped = true;
+      }
+    }
+    start++;
   }
-  
+  return steps;
+}
+
+export const AlgorithmRegistry = {
+  "Merge Sort": getMergeSortSteps,
+  "Quick Sort": getQuickSortSteps,
+  "Heap Sort": getHeapSortSteps,
+  "Bubble Sort": getBubbleSortSteps,
+  "Insertion Sort": getInsertionSortSteps,
+  "Selection Sort": getSelectionSortSteps,
+  "Shell Sort": getShellSortSteps,
+  "Cocktail Sort": getCocktailSortSteps,
+};
